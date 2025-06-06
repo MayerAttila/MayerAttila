@@ -15,12 +15,12 @@
 - **Databases:** PostgreSQL, MongoDB
 - **DevOps:** Docker, Kubernetes, GitHub Actions
 
-<!-- ===== STATS & BADGES ===== -->
-### 📊 GitHub Stats
-![YourUsername’s GitHub stats](https://github-readme-stats.vercel.app/api?username=YourUsername&show_icons=true)
-![Top Langs](https://github-readme-stats.vercel.app/api/top-langs/?username=YourUsername&layout=compact)
 
 <!-- ===== CONTACT ===== -->
-### 📫 How to reach me
-<a href="mailto:you@example.com"><img src="https://img.shields.io/badge/Email-your@example.com-D14836?style=flat&logo=gmail&logoColor=white"/></a>
-<a href="https://www.linkedin.com/in/your-profile"><img src="https://img.shields.io/badge/LinkedIn-YourProfile-0A66C2?style=flat&logo=linkedin&logoColor=white"/></a>
+### 📊 My GitHub Stats
+
+![GitHub Stats](https://github-readme-stats.vercel.app/api?username=MayerAttila&show_icons=true)
+
+### 📈 Top Languages
+
+![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=MayerAttila&layout=compact)
