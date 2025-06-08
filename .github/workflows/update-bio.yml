@@ -1,4 +1,4 @@
-name: "🦄 Update Bio with ETH Price"
+name: “🦄 Update Bio with ETH Price”
 
 on:
   schedule:
@@ -9,35 +9,20 @@ on:
 jobs:
   update-bio:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
-
       - name: Fetch current ETH→USD price
         id: price
         run: |
           PRICE=$(curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' \
             | jq -r '.ethereum.usd')
-          echo "🚀 Fetched price: $PRICE"
           echo "::set-output name=price::$PRICE"
-
-      - name: Debug: show current bio
-        run: |
-          echo "↪ Current bio from GitHub:"
-          curl -s -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
-            https://api.github.com/user | jq -r '.bio'
 
       - name: Update GitHub profile bio
         run: |
-          PRICE=${{ steps.price.outputs.price }}
-          NEW_BIO="🔷🦄 ETH Believer 🦄🔷 | Current ETH: \$${PRICE} USD"
-          echo "✏️ Setting new bio to: $NEW_BIO"
-          curl -s -o /dev/null -w "%{http_code}" \
+          NEW_BIO="🔷 ETH Believer 🔷 | Current ETH: \$${PRICE} USD"
+          curl \
             -X PATCH \
             -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "$(jq -n --arg bio "$NEW_BIO" '{bio: $bio}')" \
-            https://api.github.com/user
+            https://api.github.com/user \
+            -d "$(jq -n --arg bio "$NEW_BIO" '{bio: $bio}')"
