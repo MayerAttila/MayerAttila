@@ -17,12 +17,16 @@ jobs:
             | jq -r '.ethereum.usd')
           echo "::set-output name=price::$PRICE"
 
-      - name: Update GitHub profile bio
+            - name: Update GitHub profile bio
         run: |
-          NEW_BIO="👋 Hi, I’m MayerAttila — Current ETH price is \$${{ steps.price.outputs.price }} USD"
-          curl \
+          PRICE=${{ steps.price.outputs.price }}
+          # Build a bio with emoji “borders” and the live price
+          NEW_BIO="🔷 ETH Believer 🔷 | Current ETH: \$${PRICE} USD"
+          echo "✏️ Setting new bio to: $NEW_BIO"
+          curl -s -o /dev/null -w "%{http_code}" \
             -X PATCH \
             -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
             -H "Content-Type: application/json" \
-            https://api.github.com/user \
-            -d "$(jq -n --arg bio "$NEW_BIO" '{bio: $bio}')"
+            -d "$(jq -n --arg bio "$NEW_BIO" '{bio: $bio}')" \
+            https://api.github.com/user
+
