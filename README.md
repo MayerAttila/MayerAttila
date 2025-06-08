@@ -16,11 +16,11 @@
 - **DevOps:** Docker, Kubernetes, GitHub Actions
 
 
-<!-- ===== CONTACT ===== -->
-### 📊 My GitHub Stats
+### 📊 My GitHub Stats (including private)
 
-![GitHub Stats](https://github-readme-stats.vercel.app/api?username=MayerAttila&show_icons=true)
+![GitHub Stats](https://github-readme-stats.vercel.app/api?username=MayerAttila&show_icons=true&show_private=true)
 
-### 📈 Top Languages
+### 📈 Top Languages (including private)
 
-![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=MayerAttila&layout=compact)
+![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=MayerAttila&layout=compact&show_private=true)
+
