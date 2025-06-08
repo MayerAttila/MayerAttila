@@ -1,4 +1,4 @@
-name: “🦄 Update Bio with ETH Price”
+name: “Update Bio with ETH Price”Add commentMore actions
 
 on:
   schedule:
@@ -19,7 +19,7 @@ jobs:
 
       - name: Update GitHub profile bio
         run: |
-          NEW_BIO="🔷 ETH Believer 🔷 | Current ETH: \$${PRICE} USD"
+          NEW_BIO="🔷 ETH Believer 🔷 | ETH:  \$${{ steps.price.outputs.price }} USD"
           curl \
             -X PATCH \
             -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
