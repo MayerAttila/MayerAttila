@@ -1,0 +1,28 @@
+name: “🦄 Update Bio with ETH Price”
+
+on:
+  schedule:
+    # every hour at minute 0
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  update-bio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch current ETH→USD price
+        id: price
+        run: |
+          PRICE=$(curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' \
+            | jq -r '.ethereum.usd')
+          echo "::set-output name=price::$PRICE"
+
+      - name: Update GitHub profile bio
+        run: |
+          NEW_BIO="👋 Hi, I’m MayerAttila — Current ETH price is \$${{ steps.price.outputs.price }} USD"
+          curl \
+            -X PATCH \
+            -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/user \
+            -d "$(jq -n --arg bio "$NEW_BIO" '{bio: $bio}')"
