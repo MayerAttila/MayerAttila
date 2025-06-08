@@ -1,11 +1,11 @@
 <!-- ===== INTRODUCTION ===== -->
-## 👋 Hello, I’m [Your Name]
-- 🔭 I’m currently working on: [Project A](link)
+## 👋 Hello, I’m Mayer Attila
+- 🔭 I’m currently working on: [Project A](https://github.com/MayerAttila/ProjectA)
 - 🌱 I’m learning: Technology X, Framework Y
 - 👯 I’m looking to collaborate on: Open-source libraries, APIs
 - 🤔 I’m looking for help with: [Specific topic or skill]
 - 💬 Ask me about: JavaScript, Python, DevOps
-- 📫 How to reach me: [Email](mailto:you@example.com)
+- 📫 How to reach me: [Email](mailto:mayer@example.com)
 - ⚡ Fun fact: I love 🏕️ and 🎸
 
 <!-- ===== SKILLS ===== -->
@@ -15,12 +15,9 @@
 - **Databases:** PostgreSQL, MongoDB
 - **DevOps:** Docker, Kubernetes, GitHub Actions
 
+<!-- ===== STATS ===== -->
+### 📊 My GitHub Stats (incl. private)
+![GitHub Stats](https://github-readme-stats-pnmd-acq0593bq.vercel.app/api?username=MayerAttila&show_icons=true&count_private=true)
 
-### 📊 My GitHub Stats (including private)
-
-![GitHub Stats](https://github-readme-stats.vercel.app/api?username=MayerAttila&show_icons=true&show_private=true)
-
-### 📈 Top Languages (including private)
-
-![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=MayerAttila&layout=compact&show_private=true)
-
+### 📈 Top Languages (incl. private)
+![Top Languages](https://github-readme-stats-pnmd-acq0593bq.vercel.app/api/top-langs/?username=MayerAttila&layout=compact&count_private=true)
