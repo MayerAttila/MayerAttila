@@ -10,18 +10,11 @@ jobs:
   update-bio:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch current ETH→USD price
-        id: price
-        run: |
-          PRICE=$(curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' \
-            | jq -r '.ethereum.usd')
-          echo "::set-output name=price::$PRICE"
-
-            - name: Update GitHub profile bio
+        - name: Update GitHub profile bio
         run: |
           PRICE=${{ steps.price.outputs.price }}
           # Build a bio with emoji “borders” and the live price
-          NEW_BIO="🔷 ETH Believer 🔷 | Current ETH: \$${PRICE} USD"
+          NEW_BIO="🔷🦄 ETH Believer 🦄🔷 | Current ETH: \$${PRICE} USD"
           echo "✏️ Setting new bio to: $NEW_BIO"
           curl -s -o /dev/null -w "%{http_code}" \
             -X PATCH \
@@ -29,4 +22,3 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg bio "$NEW_BIO" '{bio: $bio}')" \
             https://api.github.com/user
-
