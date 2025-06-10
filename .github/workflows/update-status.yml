@@ -1,5 +1,5 @@
 # .github/workflows/update-eth-status.yml
-# This version has the corrected logic to display the absolute price change.
+# This version has simplified and corrected logic to show ONLY the price change.
 
 name: Update GitHub Status with ETH Trend
 
@@ -14,7 +14,7 @@ jobs:
   update-status:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Fetch the last 24 hours of price data from the CoinGecko API.
+      # Step 1: Fetch the last 24 hours of price data.
       - name: Fetch ETH price data (last 24h)
         id: prices
         run: |
@@ -27,55 +27,55 @@ jobs:
 
           echo "Fetched prices -> 24h Ago: $PRICE_OLD, Current: $PRICE_NEW"
 
-      # Step 2: Calculate all values and format the status message correctly.
-      - name: Compare prices and set status
+      # Step 2: Calculate the change and format the status message.
+      - name: Calculate price change and set status
         id: status
         run: |
           PRICE_OLD=${{ steps.prices.outputs.old }}
           PRICE_NEW=${{ steps.prices.outputs.new }}
 
           # Use a single, robust awk command to handle all calculations and formatting.
+          # This avoids shell errors and produces the correct, simple output.
           awk -v new="$PRICE_NEW" -v old="$PRICE_OLD" '
           BEGIN {
               # 1. Calculate the absolute dollar change
-              price_change_absolute = new - old;
+              dollar_change = new - old;
 
               # 2. Calculate the percentage change
               if (old > 0) {
-                  percent_change = (price_change_absolute / old) * 100;
+                  percent_change = (dollar_change / old) * 100;
               } else {
                   percent_change = 0;
               }
 
-              # 3. Determine the trend, emoji, and the sign for the message
-              if (price_change_absolute >= 0) {
+              # 3. Determine the emoji and the correct sign (+ or -)
+              if (dollar_change >= 0) {
                   emoji = ":chart_with_upwards_trend:";
                   sign = "+";
               } else {
                   emoji = ":chart_with_downwards_trend:";
-                  # The negative sign is already part of the number, so no sign is needed
+                  # The negative sign is already part of the number, so no extra sign is needed
                   sign = ""; 
               }
 
-              # 4. Construct the final, correct message string
-              # Format: ETH: $CurrentPrice (+$AbsoluteChange / +PercentageChange%)
-              message = sprintf("ETH: $%.2f (%s$%.2f / %s%.2f%%)", new, sign, price_change_absolute, sign, percent_change);
+              # 4. Construct the simple message: +$Amount (+Percent%)
+              message = sprintf("%s$%.2f (%s%.2f%%)", sign, dollar_change, sign, percent_change);
 
-              # 5. Print the key=value pairs for the GITHUB_OUTPUT file
+              # 5. Print the key=value pairs for the next step
               print "emoji=" emoji;
               print "message=" message;
           }
           ' >> $GITHUB_OUTPUT # Append the output of awk directly to the file
 
           # Log the planned status for easier debugging
-          echo "Status to be set -> $(grep 'emoji' $GITHUB_OUTPUT | cut -d'=' -f2) $(grep 'message' $GITHUB_OUTPUT | cut -d'=' -f2)"
+          echo "Final status message will be: $(grep 'message' $GITHUB_OUTPUT | cut -d'=' -f2)"
 
-      # Step 3: Send the update to the GitHub GraphQL API to change your user status.
+      # Step 3: Send the update to the GitHub GraphQL API.
       - name: Update GitHub profile status
         env:
           GH_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
-          # Construct the GraphQL mutation payload using jq.
+          # Construct the GraphQL mutation payload.
           GRAPHQL_PAYLOAD=$(jq -n \
             --arg emoji "${{ steps.status.outputs.emoji }}" \
             --arg message "${{ steps.status.outputs.message }}" \
