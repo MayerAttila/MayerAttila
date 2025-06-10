@@ -25,11 +25,13 @@ jobs:
           PCT=$(echo "$DATA" | jq -r '.[0].price_change_percentage_24h')
           DOLLAR=$(echo "$DATA" | jq -r '.[0].price_change_24h')
           
-          # Determine the direction arrow based on the percentage change.
+          # Determine the direction arrow and the corresponding GitHub emoji name.
           if [[ "$(echo "$PCT" | cut -c1)" == "-" ]]; then
             ARROW="🔻"
+            EMOJI_NAME=":chart_with_downwards_trend:"
           else
             ARROW="🔺"
+            EMOJI_NAME=":chart_with_upwards_trend:"
           fi
           
           # Format the numbers for display.
@@ -40,9 +42,10 @@ jobs:
           
           # Set outputs for subsequent steps.
           echo "price=$PRICE" >> $GITHUB_OUTPUT
-          echo "pct=$PCT_FMT" >> $GITHUB_OUTPUT
-          echo "dollar=$DOLLAR_FMT" >> $GITHUB_OUTPUT
+          echo "pct_fmt=$PCT_FMT" >> $GITHUB_OUTPUT
+          echo "dollar_fmt=$DOLLAR_FMT" >> $GITHUB_OUTPUT
           echo "arrow=$ARROW" >> $GITHUB_OUTPUT
+          echo "emoji_name=$EMOJI_NAME" >> $GITHUB_OUTPUT
 
       # Step 3: Update GitHub Profile Status using the GraphQL API.
       - name: Update GitHub Status via GraphQL
@@ -51,16 +54,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
           # Prepare variables from the previous step's output.
-          PRICE="${{ steps.market.outputs.price }}"
-          PCT="${{ steps.market.outputs.pct }}"
-          DOLLAR="${{ steps.market.outputs.dollar }}"
           ARROW="${{ steps.market.outputs.arrow }}"
+          PCT_FMT="${{ steps.market.outputs.pct_fmt }}"
+          DOLLAR_FMT="${{ steps.market.outputs.dollar_fmt }}"
+          EMOJI_NAME="${{ steps.market.outputs.emoji_name }}"
           
-          # Construct the status message.
-          # Note: The dollar sign for the variable is escaped (\$) to prevent shell expansion.
-          MSG="ETH: $ARROW $PCT (\$$DOLLAR)"
+          # Construct a safer status message without problematic characters.
+          MSG="ETH: $ARROW $PCT_FMT ($DOLLAR_FMT USD)"
           echo "✏️ Setting status message to: $MSG"
-          
+          echo "✏️ Setting emoji to: $EMOJI_NAME"
+
           # Prepare the GraphQL mutation.
           read -r -d '' QUERY <<-'EOF'
           mutation($msg: String!, $emoji: String!) {
@@ -79,12 +82,18 @@ jobs:
           EOF
           
           # Create the JSON payload for the API request.
+          # Using --arg for all variables is the safest way to build JSON.
           JSON_PAYLOAD=$(jq -n \
             --arg query "$QUERY" \
             --arg msg "$MSG" \
-            --arg emoji "$ARROW" \
+            --arg emoji "$EMOJI_NAME" \
             '{query: $query, variables: {msg: $msg, emoji: $emoji}}')
             
+          echo "---"
+          echo "Attempting to send the following JSON payload:"
+          echo "$JSON_PAYLOAD"
+          echo "---"
+
           # Make the API call to GitHub.
           RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
             -H "Authorization: bearer $GITHUB_TOKEN" \
@@ -103,7 +112,7 @@ jobs:
           
           # Check if the API call was successful.
           if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::error::GraphQL mutation failed with status code $HTTP_CODE."
+            echo "::error::GraphQL mutation failed with status code $HTTP_CODE. See response body above for details."
             exit 1
           fi
 
