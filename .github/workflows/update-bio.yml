@@ -19,7 +19,7 @@ jobs:
 
       - name: Update GitHub profile bio
         run: |
-          NEW_BIO="🔷 ETH Believer 🔷 | ETH:  \$${{ steps.price.outputs.price }} USD"
+          NEW_BIO="🔷 ETH Believer 🔷 | ETH:  \$${{ steps.price.outputs.price }}"
           curl \
             -X PATCH \
             -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
