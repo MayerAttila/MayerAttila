@@ -72,7 +72,8 @@ jobs:
       - name: Update GitHub profile status
         env:
           # The token is securely accessed from the repository's secrets.
-          GH_TOKEN: ${{ secrets.USER_STATUS_TOKEN }}
+          # The secret can be named anything, but USER_STATUS_TOKEN is descriptive.
+          GH_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
           # Construct the GraphQL mutation payload using jq. This is safer than string concatenation.
           # The query changes the user status, and the variables provide the new emoji and message.
