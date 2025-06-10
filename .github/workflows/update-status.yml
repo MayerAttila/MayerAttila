@@ -1,74 +1,81 @@
 # .github/workflows/update-eth-status.yml
+# This is the full code to save in your repository.
 
 name: Update GitHub Status with ETH Trend
 
 on:
   schedule:
     # This schedule runs the workflow every day at midnight UTC.
-    # You can change the cron schedule to run at a different time.
+    # The cron syntax is 'minute hour day month day-of-week'.
     - cron: "0 0 * * *"
   # This allows you to run the workflow manually from the Actions tab on GitHub.
   workflow_dispatch:
 
 jobs:
   update-status:
+    # This job runs on a standard GitHub-hosted Ubuntu runner.
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Fetch price data from the CoinGecko API
-      # We get the market chart for the last day, which includes price points.
+      # Step 1: Fetch the last 24 hours of price data from the CoinGecko API.
       - name: Fetch ETH price data (last 24h)
         id: prices
         run: |
-          # Fetch market chart data. The 'prices' array contains [timestamp, price] pairs.
+          # Use curl to silently (-s) fetch market chart data for Ethereum in USD over the last day.
           JSON_DATA=$(curl -s 'https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=1')
 
-          # Extract the first price (approx. 24h ago) and the last price (current).
+          # Use jq to parse the JSON and extract the first price (approx. 24h ago) and the last price (current).
+          # The '.prices[0][1]' path gets the price from the first array element.
+          # The '.prices[-1][1]' path gets the price from the last array element.
           PRICE_OLD=$(echo $JSON_DATA | jq -r '.prices[0][1]')
           PRICE_NEW=$(echo $JSON_DATA | jq -r '.prices[-1][1]')
 
-          # Pass these prices to the next step using outputs.
-          echo "::set-output name=old::$PRICE_OLD"
-          echo "::set-output name=new::$PRICE_NEW"
-          echo "Price 24h ago: $PRICE_OLD, Current Price: $PRICE_NEW"
+          # This is the modern and recommended way to create output variables for subsequent steps.
+          # We append key=value pairs to the file specified by the $GITHUB_OUTPUT environment variable.
+          echo "old=$PRICE_OLD" >> $GITHUB_OUTPUT
+          echo "new=$PRICE_NEW" >> $GITHUB_OUTPUT
 
-      # Step 2: Compare prices and determine the status message and emoji.
+          echo "Fetched prices -> 24h Ago: $PRICE_OLD, Current: $PRICE_NEW"
+
+      # Step 2: Compare the old and new prices to determine the trend and construct the status message.
       - name: Compare prices and set status
         id: status
         run: |
-          # awk is used for safe floating-point (decimal) calculations in shell.
+          # The values from the previous step are available via the 'steps' context.
           PRICE_OLD=${{ steps.prices.outputs.old }}
           PRICE_NEW=${{ steps.prices.outputs.new }}
 
-          # Determine if the price went up or down.
+          # Use awk for safe floating-point (decimal) arithmetic, which is more reliable than shell arithmetic.
+          # It prints "1" if the new price is greater than the old, otherwise "0".
           IS_UP=$(awk -v new="$PRICE_NEW" -v old="$PRICE_OLD" 'BEGIN { print (new > old) ? "1" : "0" }')
 
-          # Calculate the percentage change to 2 decimal places.
+          # Calculate the percentage change, formatted to two decimal places.
           PERCENT_CHANGE=$(awk -v new="$PRICE_NEW" -v old="$PRICE_OLD" 'BEGIN { if (old > 0) { printf "%.2f", ((new - old) / old) * 100 } else { print "0.00" } }')
 
-          # Set the emoji and message based on the trend.
+          # Set the status emoji and message text based on whether the price went up or down.
           if [ "$IS_UP" -eq 1 ]; then
             EMOJI=":chart_with_upwards_trend:"
-            # Add a plus sign for positive change.
+            # Add a plus sign for positive changes.
             MESSAGE="ETH: \$$(printf "%.2f" $PRICE_NEW) (+${PERCENT_CHANGE}%)"
           else
             EMOJI=":chart_with_downwards_trend:"
-            # The negative sign is already included in the percentage calculation.
+            # The negative sign is already included from the calculation.
             MESSAGE="ETH: \$$(printf "%.2f" $PRICE_NEW) (${PERCENT_CHANGE}%)"
           fi
 
           # Set the final emoji and message as outputs for the next step.
-          echo "::set-output name=emoji::$EMOJI"
-          echo "::set-output name=message::$MESSAGE"
-          echo "New status will be: $EMOJI $MESSAGE"
+          echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
+          echo "message=$MESSAGE" >> $GITHUB_OUTPUT
 
-      # Step 3: Use the GitHub GraphQL API to update your user status.
+          echo "Status to be set -> $EMOJI $MESSAGE"
+
+      # Step 3: Send the update to the GitHub GraphQL API to change your user status.
       - name: Update GitHub profile status
         env:
-          # The token is stored in your repository's secrets for security.
+          # The token is securely accessed from the repository's secrets.
           GH_TOKEN: ${{ secrets.USER_STATUS_TOKEN }}
         run: |
-          # This command constructs the GraphQL mutation payload using jq.
-          # Using jq is safer than simple string concatenation as it handles special characters.
+          # Construct the GraphQL mutation payload using jq. This is safer than string concatenation.
+          # The query changes the user status, and the variables provide the new emoji and message.
           GRAPHQL_PAYLOAD=$(jq -n \
             --arg emoji "${{ steps.status.outputs.emoji }}" \
             --arg message "${{ steps.status.outputs.message }}" \
@@ -84,8 +91,9 @@ jobs:
             }')
 
           # Send the mutation to the GitHub GraphQL API endpoint.
+          # --fail causes curl to exit with an error if the server returns an HTTP error code (e.g., 401, 403).
           curl \
-            -X POST \
+            --fail -X POST \
             -H "Authorization: bearer $GH_TOKEN" \
             -H "Content-Type: application/json" \
             https://api.github.com/graphql \
