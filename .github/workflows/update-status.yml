@@ -1,78 +1,43 @@
-name: "🔄 Update Status with ETH Price Movement"
+name: "Update GitHub Status with ETH Daily Change"
 
 on:
   schedule:
-    - cron: '0 * * * *'   # every hour at minute 0
+    # Runs every day at midnight UTC
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 jobs:
   update-status:
     runs-on: ubuntu-latest
     steps:
-      - name: Install dependencies
+      - name: Fetch current and previous ETH price
+        id: price
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
-
-      - name: Fetch ETH market data
-        id: market
-        run: |
-          DATA=$(curl -s 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=ethereum')
-          PRICE=$(echo "$DATA" | jq -r '.[0].current_price')
-          PCT=$(echo "$DATA" | jq -r '.[0].price_change_percentage_24h')
-          DOLLAR=$(echo "$DATA" | jq -r '.[0].price_change_24h')
-          if [[ "$PCT" == -* ]]; then ARROW="🔻"; else ARROW="🔺"; fi
-          PCT_FMT=$(printf "%.2f%%" "$PCT")
-          DOLLAR_FMT=$(printf "%.2f" "$DOLLAR")
-          echo "🚀 Price: $PRICE, Change: $PCT_FMT, $DOLLAR_FMT, Arrow: $ARROW"
-          echo "price=$PRICE" >> $GITHUB_OUTPUT
-          echo "pct=$PCT_FMT" >> $GITHUB_OUTPUT
-          echo "dollar=$DOLLAR_FMT" >> $GITHUB_OUTPUT
-          echo "arrow=$ARROW" >> $GITHUB_OUTPUT
-
-      - name: Debug: show GraphQL variables
-        run: |
-          echo "🧰 Variables:"
-          echo "price=${{ steps.market.outputs.price }}"
-          echo "pct=${{ steps.market.outputs.pct }}"
-          echo "dollar=${{ steps.market.outputs.dollar }}"
-          echo "arrow=${{ steps.market.outputs.arrow }}"
-
-      - name: Update GitHub Status via GraphQL
-        env:
-          GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
-        run: |
-          PRICE=${{ steps.market.outputs.price }}
-          PCT=${{ steps.market.outputs.pct }}
-          DOLLAR=${{ steps.market.outputs.dollar }}
-          ARROW=${{ steps.market.outputs.arrow }}
-          MSG="ETH: $ARROW $PCT (\$$DOLLAR)"
-          echo "✏️ Setting status: $MSG"
-          read -r -d '' QUERY <<-'EOF'
-          mutation($msg: String!, $emoji: String!) {
-            changeUserStatus(input: {
-              message: $msg,
-              emoji: $emoji,
-              limitedAvailability: false
-            }) {
-              status {
-                message
-                emoji
-              }
-            }
-          }
-          EOF
-          RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
-            -H "Authorization: bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg query "$QUERY" --arg msg "$MSG" --arg emoji "$ARROW" '{query: $query, variables: {msg: $msg, emoji: $emoji}}')" \
-            -w "\n%{http_code}")
-          echo "📨 Response: $RESPONSE"
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-          echo "Status code: $HTTP_CODE"
-          echo "Body: $BODY"
-          if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::error ::GraphQL mutation failed with status $HTTP_CODE"
-            exit 1
+          # Get current ETH price
+          CURRENT_PRICE=$(curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' \
+            | jq -r '.ethereum.usd')
+          
+          # Get ETH price from 24 hours ago
+          PREV_PRICE=$(curl -s 'https://api.coingecko.com/api/v3/coins/ethereum/history?date=$(date -u -d "1 day ago" +%d-%m-%Y)' \
+            | jq -r '.market_data.current_price.usd')
+          
+          # Calculate percentage change
+          PERCENT_CHANGE=$(echo "scale=2; ($CURRENT_PRICE - $PREV_PRICE) / $PREV_PRICE * 100" | bc)
+          
+          # Format status (up/down emoji and change)
+          if (( $(echo "$PERCENT_CHANGE > 0" | bc -l) )); then
+            STATUS="📈 ETH ${PERCENT_CHANGE}%"
+          else
+            STATUS="📉 ETH ${PERCENT_CHANGE}%"
           fi
+          
+          echo "::set-output name=status::$STATUS"
+
+      - name: Update GitHub status
+        run: |
+          curl \
+            -X POST \
+            -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/user \
+            -d "$(jq -n --arg status "${{ steps.price.outputs.status }}" '{status: {text: $status}}')"
