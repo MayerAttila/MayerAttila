@@ -1,0 +1,64 @@
+name: "🔄 Update Status with ETH Price Movement"
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # every hour at minute 0
+  workflow_dispatch:
+
+jobs:
+  update-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      - name: Fetch ETH market data
+        id: market
+        run: |
+          DATA=$(curl -s 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=ethereum')
+          PRICE=$(echo "$DATA" | jq -r '.[0].current_price')
+          PCT=$(echo "$DATA" | jq -r '.[0].price_change_percentage_24h')
+          DOLLAR=$(echo "$DATA" | jq -r '.[0].price_change_24h')
+          # Determine arrow emoji based on price movement
+          if [[ "$PCT" == -* ]]; then ARROW="🔻"; else ARROW="🔺"; fi
+          PCT_FMT=$(printf "%.2f%%" "$PCT")
+          DOLLAR_FMT=$(printf "%.2f" "$DOLLAR")
+          echo "🚀 Price: $PRICE, Change: $PCT_FMT, Dollar change: $DOLLAR_FMT, Arrow: $ARROW"
+          echo "::set-output name=price::$PRICE"
+          echo "::set-output name=pct::$PCT_FMT"
+          echo "::set-output name=dollar::$DOLLAR_FMT"
+          echo "::set-output name=arrow::$ARROW"
+
+      - name: Update GitHub Status via GraphQL
+        env:
+          GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
+        run: |
+          PRICE=${{ steps.market.outputs.price }}
+          PCT=${{ steps.market.outputs.pct }}
+          DOLLAR=${{ steps.market.outputs.dollar }}
+          ARROW=${{ steps.market.outputs.arrow }}
+          # GraphQL mutation to change user status
+          read -r -d '' QUERY <<-'EOF'
+          mutation($msg: String!, $emoji: String!) {
+            changeUserStatus(input: {
+              message: $msg,
+              emoji: $emoji,
+              limitedAvailability: false
+            }) {
+              status {
+                message
+                emoji
+              }
+            }
+          }
+          EOF
+          # Build status message, including arrow, percent, and dollar change
+          MSG="ETH: $ARROW $PCT (\$$DOLLAR)"
+          echo "✏️ Setting status to: $MSG"
+          # Send the GraphQL request
+          curl -s -X POST https://api.github.com/graphql \
+            -H "Authorization: bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg query "$QUERY" --arg msg "$MSG" --arg emoji "$ARROW" '{query: $query, variables: {msg: $msg, emoji: $emoji}}')"
