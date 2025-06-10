@@ -82,7 +82,7 @@ jobs:
         env:
           # The token is securely accessed from the repository's secrets.
           # The secret must be named USER_STATUS_TOKEN in your repository settings.
-          GH_TOKEN: ${{ secrets.USER_STATUS_TOKEN }}
+          GH_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
           # Construct the GraphQL mutation payload using jq. This is safer than string concatenation.
           GRAPHQL_PAYLOAD=$(jq -n \
