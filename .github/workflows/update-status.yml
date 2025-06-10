@@ -1,5 +1,5 @@
 # .github/workflows/update-eth-status.yml
-# This version has simplified and corrected logic to show ONLY the price change.
+# This version adds a crucial backslash to escape the dollar sign, fixing the bug.
 
 name: Update GitHub Status with ETH Trend
 
@@ -35,7 +35,6 @@ jobs:
           PRICE_NEW=${{ steps.prices.outputs.new }}
 
           # Use a single, robust awk command to handle all calculations and formatting.
-          # This avoids shell errors and produces the correct, simple output.
           awk -v new="$PRICE_NEW" -v old="$PRICE_OLD" '
           BEGIN {
               # 1. Calculate the absolute dollar change
@@ -54,18 +53,19 @@ jobs:
                   sign = "+";
               } else {
                   emoji = ":chart_with_downwards_trend:";
-                  # The negative sign is already part of the number, so no extra sign is needed
                   sign = ""; 
               }
 
               # 4. Construct the simple message: +$Amount (+Percent%)
-              message = sprintf("%s$%.2f (%s%.2f%%)", sign, dollar_change, sign, percent_change);
+              # The \\$ is the critical fix. It tells awk to print a literal backslash
+              # before the dollar sign, which "escapes" it for the next step.
+              message = sprintf("%s\\$%.2f (%s%.2f%%)", sign, dollar_change, sign, percent_change);
 
               # 5. Print the key=value pairs for the next step
               print "emoji=" emoji;
               print "message=" message;
           }
-          ' >> $GITHUB_OUTPUT # Append the output of awk directly to the file
+          ' >> $GITHUB_OUTPUT 
 
           # Log the planned status for easier debugging
           echo "Final status message will be: $(grep 'message' $GITHUB_OUTPUT | cut -d'=' -f2)"
@@ -73,7 +73,7 @@ jobs:
       # Step 3: Send the update to the GitHub GraphQL API.
       - name: Update GitHub profile status
         env:
-          GH_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
+          GH_TOKEN: ${{ secrets.USER_STATUS_TOKEN }}
         run: |
           # Construct the GraphQL mutation payload.
           GRAPHQL_PAYLOAD=$(jq -n \
@@ -95,5 +95,4 @@ jobs:
             --fail -X POST \
             -H "Authorization: bearer $GH_TOKEN" \
             -H "Content-Type: application/json" \
-            https://api.github.com/graphql \
-            -d "$GRAPHQL_PAYLOAD"
+            https://api.gith
