@@ -11,56 +11,40 @@ jobs:
   update-status:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Install jq for processing the API response. curl is pre-installed.
+      # Step 1: Install jq.
       - name: Install dependencies
         run: sudo apt-get install -y jq
 
-      # Step 2: Fetch detailed ETH market data from CoinGecko.
+      # Step 2: Fetch ETH market data.
       - name: Fetch ETH market data
         id: market
         run: |
-          # Fetch data from the 'markets' endpoint for more detail.
           DATA=$(curl -s 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=ethereum')
-          
-          # Extract price and 24h percentage change.
           PRICE=$(echo "$DATA" | jq -r '.[0].current_price')
           PCT_CHANGE=$(echo "$DATA" | jq -r '.[0].price_change_percentage_24h')
           
-          # Determine the direction arrow based on the sign of the change.
           if [[ "$(echo "$PCT_CHANGE" | cut -c1)" == "-" ]]; then
             ARROW="🔻"
           else
             ARROW="🔺"
           fi
           
-          # Format the percentage to two decimal places.
           PCT_FMT=$(printf "%.2f%%" "$PCT_CHANGE")
           
-          # Set outputs for the next step.
           echo "price=$PRICE" >> $GITHUB_OUTPUT
           echo "pct_fmt=$PCT_FMT" >> $GITHUB_OUTPUT
           echo "arrow=$ARROW" >> $GITHUB_OUTPUT
 
-      # Step 3: Update GitHub Status using the official GitHub CLI.
-      # This is a much more robust method than using curl.
-      - name: Update GitHub Status with gh CLI
+      # Step 3: Update GitHub Status with enhanced error logging.
+      - name: Update GitHub Status (with debug output)
         env:
-          # The GITHUB_TOKEN is automatically used by the gh CLI.
           GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
-          # Prepare the variables from the previous step.
-          PRICE="${{ steps.market.outputs.price }}"
-          PCT_FMT="${{ steps.market.outputs.pct_fmt }}"
-          ARROW="${{ steps.market.outputs.arrow }}"
+          STATUS_MESSAGE="ETH: ${{ steps.market.outputs.price }} USD (${{ steps.market.outputs.pct_fmt }})"
+          STATUS_EMOJI="${{ steps.market.outputs.arrow }}"
           
-          # Construct the status message.
-          STATUS_MESSAGE="ETH: $PRICE USD ($PCT_FMT)"
-          STATUS_EMOJI="$ARROW"
+          echo "✏️ Attempting to set status to: \"$STATUS_MESSAGE\" with emoji: $STATUS_EMOJI"
           
-          echo "✏️ Setting status to: \"$STATUS_MESSAGE\" with emoji: $STATUS_EMOJI"
-          
-          # This is the GraphQL mutation query.
-          # Note that the variable names here ($message, $emoji) must match the -f flags below.
           read -r -d '' QUERY <<-'EOF'
             mutation($message: String!, $emoji: String!) {
               changeUserStatus(input: {
@@ -74,12 +58,18 @@ jobs:
             }
           EOF
 
-          # Use the 'gh api graphql' command to execute the mutation.
-          # This handles authentication and request formatting automatically.
-          # The -f flags pass variables into the GraphQL query.
+          echo "---"
+          echo "DEBUG: Running gh command with full error logging..."
+          echo "---"
+          
+          # This command is modified for debugging.
+          # 1. We redirect stderr to stdout (2>&1) to capture all output.
+          # 2. We add '|| true' so the step doesn't fail, allowing us to see the error.
           gh api graphql \
             -f query="$QUERY" \
             -f message="$STATUS_MESSAGE" \
-            -f emoji="$STATUS_EMOJI"
+            -f emoji="$STATUS_EMOJI" 2>&1 || true
             
-          echo "✅ Status update command sent successfully via gh CLI."
+          echo "---"
+          echo "DEBUG: Command finished. If there was an error, it should be visible above."
+          echo "---"
