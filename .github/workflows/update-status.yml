@@ -1,119 +1,142 @@
 name: "🔄 Update Status with ETH Price Movement"
 
-# This workflow runs every hour OR when you manually trigger it.
 on:
   schedule:
     - cron: '0 * * * *' # Every hour at the 0th minute.
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab.
 
 jobs:
+  # This is the main job that updates your status with the ETH price.
   update-status:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Install necessary command-line tools.
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y jq curl
 
-      # Step 2: Fetch Ethereum market data from CoinGecko API.
       - name: Fetch ETH market data
         id: market
         run: |
           DATA=$(curl -s 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=ethereum')
           PRICE=$(echo "$DATA" | jq -r '.[0].current_price')
           PCT=$(echo "$DATA" | jq -r '.[0].price_change_percentage_24h')
-          DOLLAR=$(echo "$DATA" | jq -r '.[0].price_change_24h')
           
-          # Determine the direction arrow and the corresponding GitHub emoji name.
           if [[ "$(echo "$PCT" | cut -c1)" == "-" ]]; then
             ARROW="🔻"
-            EMOJI_NAME=":chart_with_downwards_trend:"
           else
             ARROW="🔺"
-            EMOJI_NAME=":chart_with_upwards_trend:"
           fi
           
-          # Format the numbers for display.
           PCT_FMT=$(printf "%.2f%%" "$PCT")
-          DOLLAR_FMT=$(printf "%.2f" "$DOLLAR")
           
-          echo "🚀 Price: $PRICE, Change: $PCT_FMT, $DOLLAR_FMT, Arrow: $ARROW"
-          
-          # Set outputs for subsequent steps.
           echo "price=$PRICE" >> $GITHUB_OUTPUT
           echo "pct_fmt=$PCT_FMT" >> $GITHUB_OUTPUT
-          echo "dollar_fmt=$DOLLAR_FMT" >> $GITHUB_OUTPUT
           echo "arrow=$ARROW" >> $GITHUB_OUTPUT
-          echo "emoji_name=$EMOJI_NAME" >> $GITHUB_OUTPUT
 
-      # Step 3: Update GitHub Profile Status using the GraphQL API.
       - name: Update GitHub Status via GraphQL
         env:
           # This token MUST have the 'user:write' scope.
           GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
-          # Prepare variables from the previous step's output.
           ARROW="${{ steps.market.outputs.arrow }}"
           PCT_FMT="${{ steps.market.outputs.pct_fmt }}"
-          DOLLAR_FMT="${{ steps.market.outputs.dollar_fmt }}"
-          EMOJI_NAME="${{ steps.market.outputs.emoji_name }}"
+          PRICE="${{ steps.market.outputs.price }}"
           
-          # Construct a safer status message without problematic characters.
-          MSG="ETH: $ARROW $PCT_FMT ($DOLLAR_FMT USD)"
-          echo "✏️ Setting status message to: $MSG"
-          echo "✏️ Setting emoji to: $EMOJI_NAME"
+          # A simplified, safe status message.
+          MSG="ETH: ${{ steps.market.outputs.price }} USD (${{ steps.market.outputs.pct_fmt }})"
+          EMOJI="${{ steps.market.outputs.arrow }}" # Use the raw emoji character
 
-          # Prepare the GraphQL mutation.
+          echo "✏️ Setting status message to: $MSG"
+          echo "✏️ Setting emoji to: $EMOJI"
+
           read -r -d '' QUERY <<-'EOF'
           mutation($msg: String!, $emoji: String!) {
-            changeUserStatus(input: {
-              message: $msg,
-              emoji: $emoji,
-              expiresAt: null,
-              limitedAvailability: false
-            }) {
-              status {
-                message
-                emoji
-              }
+            changeUserStatus(input: { message: $msg, emoji: $emoji }) {
+              status { message emoji }
             }
           }
           EOF
           
-          # Create the JSON payload for the API request.
-          # Using --arg for all variables is the safest way to build JSON.
-          JSON_PAYLOAD=$(jq -n \
-            --arg query "$QUERY" \
-            --arg msg "$MSG" \
-            --arg emoji "$EMOJI_NAME" \
+          JSON_PAYLOAD=$(jq -n --arg query "$QUERY" --arg msg "$MSG" --arg emoji "$EMOJI" \
             '{query: $query, variables: {msg: $msg, emoji: $emoji}}')
             
           echo "---"
-          echo "Attempting to send the following JSON payload:"
+          echo "DEBUG: Sending the following JSON payload:"
           echo "$JSON_PAYLOAD"
           echo "---"
 
-          # Make the API call to GitHub.
           RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
             -H "Authorization: bearer $GITHUB_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$JSON_PAYLOAD" \
-            -w "\n%{http_code}") # Append HTTP status code to the response.
+            -w "\n%{http_code}")
             
-          # Extract the response body and HTTP code.
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | sed '$d')
           
           echo "---"
-          echo "Response Body: $BODY"
-          echo "HTTP Status Code: $HTTP_CODE"
+          echo "DEBUG: Response Body from GitHub:"
+          echo "$BODY"
+          echo ""
+          echo "DEBUG: HTTP Status Code: $HTTP_CODE"
           echo "---"
           
-          # Check if the API call was successful.
           if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::error::GraphQL mutation failed with status code $HTTP_CODE. See response body above for details."
+            echo "::error::GraphQL mutation failed. Status Code: $HTTP_CODE. See response body above for details."
             exit 1
           fi
 
           echo "✅ Status updated successfully!"
+
+  # This is a diagnostic job. If the main job fails, enable this to test your token.
+  # To enable it, change `if: false` to `if: true`
+  simple-test:
+    runs-on: ubuntu-latest
+    # This job is disabled by default. Change to "if: true" to run it.
+    if: false
+    steps:
+      - name: Run a minimal, hardcoded status update
+        env:
+          GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
+        run: |
+          MSG="This is a test."
+          EMOJI="✅"
+          
+          read -r -d '' QUERY <<-'EOF'
+          mutation($msg: String!, $emoji: String!) {
+            changeUserStatus(input: { message: $msg, emoji: $emoji }) {
+              status { message emoji }
+            }
+          }
+          EOF
+
+          JSON_PAYLOAD=$(jq -n --arg query "$QUERY" --arg msg "$MSG" --arg emoji "$EMOJI" \
+            '{query: $query, variables: {msg: $msg, emoji: $emoji}}')
+            
+          echo "---"
+          echo "DEBUG (Simple Test): Sending payload:"
+          echo "$JSON_PAYLOAD"
+          echo "---"
+            
+          RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
+            -H "Authorization: bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD" \
+            -w "\n%{http_code}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "---"
+          echo "DEBUG (Simple Test): Response Body:"
+          echo "$BODY"
+          echo "DEBUG (Simple Test): HTTP Status Code: $HTTP_CODE"
+          echo "---"
+
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::Simple Test Failed! This strongly indicates a problem with your GITHUB_TOKEN permissions."
+            exit 1
+          fi
+
+          echo "✅ Simple Test Succeeded!"
