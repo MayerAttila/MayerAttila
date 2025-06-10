@@ -11,24 +11,22 @@ jobs:
   update-status:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Install necessary command-line tools.
+      # Step 1: Install jq for processing the API response. curl is pre-installed.
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
+        run: sudo apt-get install -y jq
 
       # Step 2: Fetch detailed ETH market data from CoinGecko.
       - name: Fetch ETH market data
         id: market
         run: |
-          # Fetch data from the more detailed 'markets' endpoint.
+          # Fetch data from the 'markets' endpoint for more detail.
           DATA=$(curl -s 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=ethereum')
           
-          # Extract the price and 24h percentage change.
+          # Extract price and 24h percentage change.
           PRICE=$(echo "$DATA" | jq -r '.[0].current_price')
           PCT_CHANGE=$(echo "$DATA" | jq -r '.[0].price_change_percentage_24h')
           
-          # Determine the direction arrow based on whether the change is negative.
+          # Determine the direction arrow based on the sign of the change.
           if [[ "$(echo "$PCT_CHANGE" | cut -c1)" == "-" ]]; then
             ARROW="🔻"
           else
@@ -38,72 +36,50 @@ jobs:
           # Format the percentage to two decimal places.
           PCT_FMT=$(printf "%.2f%%" "$PCT_CHANGE")
           
-          # Set the outputs to be used in the next step.
+          # Set outputs for the next step.
           echo "price=$PRICE" >> $GITHUB_OUTPUT
           echo "pct_fmt=$PCT_FMT" >> $GITHUB_OUTPUT
           echo "arrow=$ARROW" >> $GITHUB_OUTPUT
 
-      # Step 3: Update GitHub Profile Status using the GraphQL API.
-      - name: Update GitHub Status
+      # Step 3: Update GitHub Status using the official GitHub CLI.
+      # This is a much more robust method than using curl.
+      - name: Update GitHub Status with gh CLI
         env:
-          # Your token is confirmed to be working correctly.
+          # The GITHUB_TOKEN is automatically used by the gh CLI.
           GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
-          # Construct a clear and simple status message.
-          MSG="ETH: ${{ steps.market.outputs.price }} USD (${{ steps.market.outputs.pct_fmt }})"
-          EMOJI="${{ steps.market.outputs.arrow }}"
-
-          echo "✏️ Preparing to set status message: \"$MSG\" with emoji: $EMOJI"
-
-          # Define the GraphQL mutation for changing user status.
+          # Prepare the variables from the previous step.
+          PRICE="${{ steps.market.outputs.price }}"
+          PCT_FMT="${{ steps.market.outputs.pct_fmt }}"
+          ARROW="${{ steps.market.outputs.arrow }}"
+          
+          # Construct the status message.
+          STATUS_MESSAGE="ETH: $PRICE USD ($PCT_FMT)"
+          STATUS_EMOJI="$ARROW"
+          
+          echo "✏️ Setting status to: \"$STATUS_MESSAGE\" with emoji: $STATUS_EMOJI"
+          
+          # This is the GraphQL mutation query.
+          # Note that the variable names here ($message, $emoji) must match the -f flags below.
           read -r -d '' QUERY <<-'EOF'
-          mutation($message: String!, $emoji: String!) {
-            changeUserStatus(input: {
-              message: $message,
-              emoji: $emoji
-            }) {
-              status {
-                message
-                emoji
+            mutation($message: String!, $emoji: String!) {
+              changeUserStatus(input: {
+                message: $message,
+                emoji: $emoji
+              }) {
+                status {
+                  message
+                }
               }
             }
-          }
           EOF
-          
-          # Use jq to safely create the JSON payload. This is the most reliable method.
-          JSON_PAYLOAD=$(jq -n \
-            --arg query "$QUERY" \
-            --arg message "$MSG" \
-            --arg emoji "$EMOJI" \
-            '{query: $query, variables: {message: $message, emoji: $emoji}}')
-            
-          echo "---"
-          echo "DEBUG: Sending the following JSON payload:"
-          echo "$JSON_PAYLOAD"
-          echo "---"
 
-          # Make the API call to the GitHub GraphQL endpoint.
-          RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
-            -H "Authorization: bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$JSON_PAYLOAD" \
-            -w "\n%{http_code}")
+          # Use the 'gh api graphql' command to execute the mutation.
+          # This handles authentication and request formatting automatically.
+          # The -f flags pass variables into the GraphQL query.
+          gh api graphql \
+            -f query="$QUERY" \
+            -f message="$STATUS_MESSAGE" \
+            -f emoji="$STATUS_EMOJI"
             
-          # Extract the response body and HTTP code for debugging.
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-          
-          echo "---"
-          echo "DEBUG: Response Body from GitHub:"
-          echo "$BODY"
-          echo ""
-          echo "DEBUG: HTTP Status Code: $HTTP_CODE"
-          echo "---"
-          
-          # Check for a successful response (HTTP 200).
-          if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::error::GraphQL mutation failed. Status Code: $HTTP_CODE. See response body above for details."
-            exit 1
-          fi
-
-          echo "✅ Status updated successfully!"
+          echo "✅ Status update command sent successfully via gh CLI."
