@@ -1,93 +1,28 @@
-# .github/workflows/update-eth-status.yml
-
-name: Update GitHub Status with ETH Trend
+name: “Update Bio with ETH Price”Add commentMore actions
 
 on:
   schedule:
-    # This schedule runs the workflow every day at midnight UTC.
-    # You can change the cron schedule to run at a different time.
-    - cron: '0 0 * * *'
-  # This allows you to run the workflow manually from the Actions tab on GitHub.
+    # every hour at minute 0
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
-  update-status:
+  update-bio:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Fetch price data from the CoinGecko API
-      # We get the market chart for the last day, which includes price points.
-      - name: Fetch ETH price data (last 24h)
-        id: prices
+      - name: Fetch current ETH→USD price
+        id: price
         run: |
-          # Fetch market chart data. The 'prices' array contains [timestamp, price] pairs.
-          JSON_DATA=$(curl -s 'https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=1')
+          PRICE=$(curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' \
+            | jq -r '.ethereum.usd')
+          echo "::set-output name=price::$PRICE"
 
-          # Extract the first price (approx. 24h ago) and the last price (current).
-          PRICE_OLD=$(echo $JSON_DATA | jq -r '.prices[0][1]')
-          PRICE_NEW=$(echo $JSON_DATA | jq -r '.prices[-1][1]')
-
-          # Pass these prices to the next step using outputs.
-          echo "::set-output name=old::$PRICE_OLD"
-          echo "::set-output name=new::$PRICE_NEW"
-          echo "Price 24h ago: $PRICE_OLD, Current Price: $PRICE_NEW"
-
-      # Step 2: Compare prices and determine the status message and emoji.
-      - name: Compare prices and set status
-        id: status
+      - name: Update GitHub profile bio
         run: |
-          # awk is used for safe floating-point (decimal) calculations in shell.
-          PRICE_OLD=${{ steps.prices.outputs.old }}
-          PRICE_NEW=${{ steps.prices.outputs.new }}
-
-          # Determine if the price went up or down.
-          IS_UP=$(awk -v new="$PRICE_NEW" -v old="$PRICE_OLD" 'BEGIN { print (new > old) ? "1" : "0" }')
-          
-          # Calculate the percentage change to 2 decimal places.
-          PERCENT_CHANGE=$(awk -v new="$PRICE_NEW" -v old="$PRICE_OLD" 'BEGIN { if (old > 0) { printf "%.2f", ((new - old) / old) * 100 } else { print "0.00" } }')
-
-          # Set the emoji and message based on the trend.
-          if [ "$IS_UP" -eq 1 ]; then
-            EMOJI=":chart_with_upwards_trend:"
-            # Add a plus sign for positive change.
-            MESSAGE="ETH: \$$(printf "%.2f" $PRICE_NEW) (+${PERCENT_CHANGE}%)"
-          else
-            EMOJI=":chart_with_downwards_trend:"
-            # The negative sign is already included in the percentage calculation.
-            MESSAGE="ETH: \$$(printf "%.2f" $PRICE_NEW) (${PERCENT_CHANGE}%)"
-          fi
-          
-          # Set the final emoji and message as outputs for the next step.
-          echo "::set-output name=emoji::$EMOJI"
-          echo "::set-output name=message::$MESSAGE"
-          echo "New status will be: $EMOJI $MESSAGE"
-
-      # Step 3: Use the GitHub GraphQL API to update your user status.
-      - name: Update GitHub profile status
-        env:
-          # The token is stored in your repository's secrets for security.
-          GH_TOKEN: ${{ secrets.USER_STATUS_TOKEN }}
-        run: |
-          # This command constructs the GraphQL mutation payload using jq.
-          # Using jq is safer than simple string concatenation as it handles special characters.
-          GRAPHQL_PAYLOAD=$(jq -n \
-            --arg emoji "${{ steps.status.outputs.emoji }}" \
-            --arg message "${{ steps.status.outputs.message }}" \
-            '{
-              "query": "mutation($status: ChangeUserStatusInput!) { changeUserStatus(input: $status) { clientMutationId } }",
-              "variables": {
-                "status": {
-                  "emoji": $emoji,
-                  "message": $message,
-                  "limitedAvailability": false
-                }
-              }
-            }')
-
-          # Send the mutation to the GitHub GraphQL API endpoint.
+          NEW_BIO="🔷 ETH Believer 🔷 | ETH:  \$${{ steps.price.outputs.price }} USD"
           curl \
-            -X POST \
-            -H "Authorization: bearer $GH_TOKEN" \
+            -X PATCH \
+            -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
             -H "Content-Type: application/json" \
-            https://api.github.com/graphql \
-            -d "$GRAPHQL_PAYLOAD"
-
+            https://api.github.com/user \
+            -d "$(jq -n --arg bio "$NEW_BIO" '{bio: $bio}')"
