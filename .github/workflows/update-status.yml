@@ -1,74 +1,92 @@
-name: "Update GitHub Status with ETH Daily Change"
+# .github/workflows/update-eth-status.yml
+
+name: Update GitHub Status with ETH Trend
 
 on:
   schedule:
-    # Runs every day at midnight UTC
-    - cron: '0 0 * * *'
+    # This schedule runs the workflow every day at midnight UTC.
+    # You can change the cron schedule to run at a different time.
+    - cron: "0 0 * * *"
+  # This allows you to run the workflow manually from the Actions tab on GitHub.
   workflow_dispatch:
 
 jobs:
   update-status:
     runs-on: ubuntu-latest
     steps:
-      - name: Install dependencies
+      # Step 1: Fetch price data from the CoinGecko API
+      # We get the market chart for the last day, which includes price points.
+      - name: Fetch ETH price data (last 24h)
+        id: prices
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq bc
+          # Fetch market chart data. The 'prices' array contains [timestamp, price] pairs.
+          JSON_DATA=$(curl -s 'https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=1')
 
-      - name: Fetch current and previous ETH price
-        id: price
+          # Extract the first price (approx. 24h ago) and the last price (current).
+          PRICE_OLD=$(echo $JSON_DATA | jq -r '.prices[0][1]')
+          PRICE_NEW=$(echo $JSON_DATA | jq -r '.prices[-1][1]')
+
+          # Pass these prices to the next step using outputs.
+          echo "::set-output name=old::$PRICE_OLD"
+          echo "::set-output name=new::$PRICE_NEW"
+          echo "Price 24h ago: $PRICE_OLD, Current Price: $PRICE_NEW"
+
+      # Step 2: Compare prices and determine the status message and emoji.
+      - name: Compare prices and set status
+        id: status
         run: |
-          set -x  # Enable verbose logging
-          
-          # Get current ETH price
-          CURRENT_PRICE=$(curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' \
-            | jq -r '.ethereum.usd')
-          if [ -z "$CURRENT_PRICE" ] || [ "$CURRENT_PRICE" = "null" ]; then
-            echo "Error: Failed to fetch current ETH price"
-            curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' > current_price_response.json
-            cat current_price_response.json
-            exit 1
-          fi
-          echo "Current Price: $CURRENT_PRICE"
-          
-          # Get ETH price from 24 hours ago
-          DATE=$(date -u --date="1 day ago" +%d-%m-%Y 2>/dev/null || date -u -v-1d +%d-%m-%Y)
-          PREV_PRICE=$(curl -s "https://api.coingecko.com/api/v3/coins/ethereum/history?date=$DATE" \
-            | jq -r '.market_data.current_price.usd')
-          if [ -z "$PREV_PRICE" ] || [ "$PREV_PRICE" = "null" ]; then
-            echo "Error: Failed to fetch previous ETH price for date $DATE"
-            curl -s "https://api.coingecko.com/api/v3/coins/ethereum/history?date=$DATE" > prev_price_response.json
-            cat prev_price_response.json
-            exit 1
-          fi
-          echo "Previous Price: $PREV_PRICE"
-          
-          # Calculate percentage change
-          PERCENT_CHANGE=$(echo "scale=2; ($CURRENT_PRICE - $PREV_PRICE) / $PREV_PRICE * 100" | bc)
-          echo "Percentage Change: $PERCENT_CHANGE"
-          
-          # Format status (up/down emoji and change)
-          if (( $(echo "$PERCENT_CHANGE > 0" | bc -l) )); then
-            STATUS="📈 ETH +${PERCENT_CHANGE}%"
+          # awk is used for safe floating-point (decimal) calculations in shell.
+          PRICE_OLD=${{ steps.prices.outputs.old }}
+          PRICE_NEW=${{ steps.prices.outputs.new }}
+
+          # Determine if the price went up or down.
+          IS_UP=$(awk -v new="$PRICE_NEW" -v old="$PRICE_OLD" 'BEGIN { print (new > old) ? "1" : "0" }')
+
+          # Calculate the percentage change to 2 decimal places.
+          PERCENT_CHANGE=$(awk -v new="$PRICE_NEW" -v old="$PRICE_OLD" 'BEGIN { if (old > 0) { printf "%.2f", ((new - old) / old) * 100 } else { print "0.00" } }')
+
+          # Set the emoji and message based on the trend.
+          if [ "$IS_UP" -eq 1 ]; then
+            EMOJI=":chart_with_upwards_trend:"
+            # Add a plus sign for positive change.
+            MESSAGE="ETH: \$$(printf "%.2f" $PRICE_NEW) (+${PERCENT_CHANGE}%)"
           else
-            STATUS="📉 ETH ${PERCENT_CHANGE}%"
+            EMOJI=":chart_with_downwards_trend:"
+            # The negative sign is already included in the percentage calculation.
+            MESSAGE="ETH: \$$(printf "%.2f" $PRICE_NEW) (${PERCENT_CHANGE}%)"
           fi
-          
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
 
-      - name: Update GitHub status
+          # Set the final emoji and message as outputs for the next step.
+          echo "::set-output name=emoji::$EMOJI"
+          echo "::set-output name=message::$MESSAGE"
+          echo "New status will be: $EMOJI $MESSAGE"
+
+      # Step 3: Use the GitHub GraphQL API to update your user status.
+      - name: Update GitHub profile status
+        env:
+          # The token is stored in your repository's secrets for security.
+          GH_TOKEN: ${{ secrets.USER_STATUS_TOKEN }}
         run: |
-          set -x  # Enable verbose logging
-          RESPONSE=$(curl -s -o response.json -w "%{http_code}" \
+          # This command constructs the GraphQL mutation payload using jq.
+          # Using jq is safer than simple string concatenation as it handles special characters.
+          GRAPHQL_PAYLOAD=$(jq -n \
+            --arg emoji "${{ steps.status.outputs.emoji }}" \
+            --arg message "${{ steps.status.outputs.message }}" \
+            '{
+              "query": "mutation($status: ChangeUserStatusInput!) { changeUserStatus(input: $status) { clientMutationId } }",
+              "variables": {
+                "status": {
+                  "emoji": $emoji,
+                  "message": $message,
+                  "limitedAvailability": false
+                }
+              }
+            }')
+
+          # Send the mutation to the GitHub GraphQL API endpoint.
+          curl \
             -X POST \
-            -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/user/statuses \
-            -d "$(jq -n --arg text "${{ steps.price.outputs.status }}" '{text: $text, emoji: "moneybag"}')")
-          if [ "$RESPONSE" -ne 201 ]; then
-            echo "Error: Failed to update GitHub status, HTTP status: $RESPONSE"
-            cat response.json
-            exit 1
-          fi
-          echo "GitHub status updated successfully: ${{ steps.price.outputs.status }}"
+            -H "Authorization: bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/graphql \
+            -d "$GRAPHQL_PAYLOAD"
