@@ -1,19 +1,22 @@
 name: "🔄 Update Status with ETH Price Movement"
 
+# This workflow runs every hour OR when you manually trigger it.
 on:
   schedule:
-    - cron: '0 * * * *' # every hour at minute 0
-  workflow_dispatch:
+    - cron: '0 * * * *' # Every hour at the 0th minute.
+  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab.
 
 jobs:
   update-status:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Install necessary command-line tools.
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y jq curl
 
+      # Step 2: Fetch Ethereum market data from CoinGecko API.
       - name: Fetch ETH market data
         id: market
         run: |
@@ -21,38 +24,50 @@ jobs:
           PRICE=$(echo "$DATA" | jq -r '.[0].current_price')
           PCT=$(echo "$DATA" | jq -r '.[0].price_change_percentage_24h')
           DOLLAR=$(echo "$DATA" | jq -r '.[0].price_change_24h')
-          if [[ "$PCT" == -* ]]; then ARROW="🔻"; else ARROW="🔺"; fi
+          
+          # Determine the direction arrow based on the percentage change.
+          if [[ "$(echo "$PCT" | cut -c1)" == "-" ]]; then
+            ARROW="🔻"
+          else
+            ARROW="🔺"
+          fi
+          
+          # Format the numbers for display.
           PCT_FMT=$(printf "%.2f%%" "$PCT")
           DOLLAR_FMT=$(printf "%.2f" "$DOLLAR")
+          
           echo "🚀 Price: $PRICE, Change: $PCT_FMT, $DOLLAR_FMT, Arrow: $ARROW"
+          
+          # Set outputs for subsequent steps.
           echo "price=$PRICE" >> $GITHUB_OUTPUT
           echo "pct=$PCT_FMT" >> $GITHUB_OUTPUT
           echo "dollar=$DOLLAR_FMT" >> $GITHUB_OUTPUT
           echo "arrow=$ARROW" >> $GITHUB_OUTPUT
 
-      - name: Debug: show GraphQL variables
-        run: |
-          echo "🧰 Variables:"
-          echo "price=${{ steps.market.outputs.price }}"
-          echo "pct=${{ steps.market.outputs.pct }}"
-          echo "dollar=${{ steps.market.outputs.dollar }}"
-          echo "arrow=${{ steps.market.outputs.arrow }}"
-
+      # Step 3: Update GitHub Profile Status using the GraphQL API.
       - name: Update GitHub Status via GraphQL
         env:
+          # This token MUST have the 'user:write' scope.
           GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
-          PRICE=${{ steps.market.outputs.price }}
-          PCT=${{ steps.market.outputs.pct }}
-          DOLLAR=${{ steps.market.outputs.dollar }}
-          ARROW=${{ steps.market.outputs.arrow }}
+          # Prepare variables from the previous step's output.
+          PRICE="${{ steps.market.outputs.price }}"
+          PCT="${{ steps.market.outputs.pct }}"
+          DOLLAR="${{ steps.market.outputs.dollar }}"
+          ARROW="${{ steps.market.outputs.arrow }}"
+          
+          # Construct the status message.
+          # Note: The dollar sign for the variable is escaped (\$) to prevent shell expansion.
           MSG="ETH: $ARROW $PCT (\$$DOLLAR)"
-          echo "✏️ Setting status: $MSG"
+          echo "✏️ Setting status message to: $MSG"
+          
+          # Prepare the GraphQL mutation.
           read -r -d '' QUERY <<-'EOF'
           mutation($msg: String!, $emoji: String!) {
             changeUserStatus(input: {
               message: $msg,
               emoji: $emoji,
+              expiresAt: null,
               limitedAvailability: false
             }) {
               status {
@@ -62,17 +77,34 @@ jobs:
             }
           }
           EOF
+          
+          # Create the JSON payload for the API request.
+          JSON_PAYLOAD=$(jq -n \
+            --arg query "$QUERY" \
+            --arg msg "$MSG" \
+            --arg emoji "$ARROW" \
+            '{query: $query, variables: {msg: $msg, emoji: $emoji}}')
+            
+          # Make the API call to GitHub.
           RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
             -H "Authorization: bearer $GITHUB_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "$(jq -n --arg query "$QUERY" --arg msg "$MSG" --arg emoji "$ARROW" '{query: $query, variables: {msg: $msg, emoji: $emoji}}')" \
-            -w "\n%{http_code}")
-          echo "📨 Response: $RESPONSE"
+            -d "$JSON_PAYLOAD" \
+            -w "\n%{http_code}") # Append HTTP status code to the response.
+            
+          # Extract the response body and HTTP code.
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | sed '$d')
-          echo "Status code: $HTTP_CODE"
-          echo "Body: $BODY"
+          
+          echo "---"
+          echo "Response Body: $BODY"
+          echo "HTTP Status Code: $HTTP_CODE"
+          echo "---"
+          
+          # Check if the API call was successful.
           if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::error ::GraphQL mutation failed with status $HTTP_CODE"
+            echo "::error::GraphQL mutation failed with status code $HTTP_CODE."
             exit 1
           fi
+
+          echo "✅ Status updated successfully!"
