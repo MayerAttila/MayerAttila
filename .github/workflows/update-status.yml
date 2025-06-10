@@ -18,24 +18,34 @@ jobs:
       - name: Fetch current and previous ETH price
         id: price
         run: |
+          set -x  # Enable verbose logging
+          
           # Get current ETH price
           CURRENT_PRICE=$(curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' \
             | jq -r '.ethereum.usd')
-          if [ -z "$CURRENT_PRICE" ]; then
+          if [ -z "$CURRENT_PRICE" ] || [ "$CURRENT_PRICE" = "null" ]; then
             echo "Error: Failed to fetch current ETH price"
+            curl -s 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd' > current_price_response.json
+            cat current_price_response.json
             exit 1
           fi
+          echo "Current Price: $CURRENT_PRICE"
           
           # Get ETH price from 24 hours ago
-          PREV_PRICE=$(curl -s 'https://api.coingecko.com/api/v3/coins/ethereum/history?date=$(date -u -d "1 day ago" +%d-%m-%Y)' \
+          DATE=$(date -u --date="1 day ago" +%d-%m-%Y 2>/dev/null || date -u -v-1d +%d-%m-%Y)
+          PREV_PRICE=$(curl -s "https://api.coingecko.com/api/v3/coins/ethereum/history?date=$DATE" \
             | jq -r '.market_data.current_price.usd')
-          if [ -z "$PREV_PRICE" ]; then
-            echo "Error: Failed to fetch previous ETH price"
+          if [ -z "$PREV_PRICE" ] || [ "$PREV_PRICE" = "null" ]; then
+            echo "Error: Failed to fetch previous ETH price for date $DATE"
+            curl -s "https://api.coingecko.com/api/v3/coins/ethereum/history?date=$DATE" > prev_price_response.json
+            cat prev_price_response.json
             exit 1
           fi
+          echo "Previous Price: $PREV_PRICE"
           
           # Calculate percentage change
           PERCENT_CHANGE=$(echo "scale=2; ($CURRENT_PRICE - $PREV_PRICE) / $PREV_PRICE * 100" | bc)
+          echo "Percentage Change: $PERCENT_CHANGE"
           
           # Format status (up/down emoji and change)
           if (( $(echo "$PERCENT_CHANGE > 0" | bc -l) )); then
@@ -48,9 +58,17 @@ jobs:
 
       - name: Update GitHub status
         run: |
-          curl -X POST \
+          set -x  # Enable verbose logging
+          RESPONSE=$(curl -s -o response.json -w "%{http_code}" \
+            -X POST \
             -H "Authorization: token ${{ secrets.USER_BIO_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/user/statuses \
-            -d "$(jq -n --arg text "${{ steps.price.outputs.status }}" '{text: $text, emoji: "moneybag"}')"
+            -d "$(jq -n --arg text "${{ steps.price.outputs.status }}" '{text: $text, emoji: "moneybag"}')")
+          if [ "$RESPONSE" -ne 201 ]; then
+            echo "Error: Failed to update GitHub status, HTTP status: $RESPONSE"
+            cat response.json
+            exit 1
+          fi
+          echo "GitHub status updated successfully: ${{ steps.price.outputs.status }}"
