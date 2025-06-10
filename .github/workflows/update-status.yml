@@ -73,7 +73,7 @@ jobs:
       # Step 3: Send the update to the GitHub GraphQL API.
       - name: Update GitHub profile status
         env:
-          GH_TOKEN: ${{ secrets.USER_STATUS_TOKEN }}
+          GH_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
         run: |
           # Construct the GraphQL mutation payload.
           GRAPHQL_PAYLOAD=$(jq -n \
