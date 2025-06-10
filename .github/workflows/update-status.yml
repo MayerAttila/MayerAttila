@@ -21,15 +21,22 @@ jobs:
           PRICE=$(echo "$DATA" | jq -r '.[0].current_price')
           PCT=$(echo "$DATA" | jq -r '.[0].price_change_percentage_24h')
           DOLLAR=$(echo "$DATA" | jq -r '.[0].price_change_24h')
-          # Determine arrow emoji based on price movement
           if [[ "$PCT" == -* ]]; then ARROW="🔻"; else ARROW="🔺"; fi
           PCT_FMT=$(printf "%.2f%%" "$PCT")
           DOLLAR_FMT=$(printf "%.2f" "$DOLLAR")
-          echo "🚀 Price: $PRICE, Change: $PCT_FMT, Dollar change: $DOLLAR_FMT, Arrow: $ARROW"
-          echo "::set-output name=price::$PRICE"
-          echo "::set-output name=pct::$PCT_FMT"
-          echo "::set-output name=dollar::$DOLLAR_FMT"
-          echo "::set-output name=arrow::$ARROW"
+          echo "🚀 Price: $PRICE, Change: $PCT_FMT, $DOLLAR_FMT, Arrow: $ARROW"
+          echo "price=$PRICE" >> $GITHUB_OUTPUT
+          echo "pct=$PCT_FMT" >> $GITHUB_OUTPUT
+          echo "dollar=$DOLLAR_FMT" >> $GITHUB_OUTPUT
+          echo "arrow=$ARROW" >> $GITHUB_OUTPUT
+
+      - name: Debug: show GraphQL variables
+        run: |
+          echo "🧰 Variables:"
+          echo "price=${{ steps.market.outputs.price }}"
+          echo "pct=${{ steps.market.outputs.pct }}"
+          echo "dollar=${{ steps.market.outputs.dollar }}"
+          echo "arrow=${{ steps.market.outputs.arrow }}"
 
       - name: Update GitHub Status via GraphQL
         env:
@@ -39,7 +46,8 @@ jobs:
           PCT=${{ steps.market.outputs.pct }}
           DOLLAR=${{ steps.market.outputs.dollar }}
           ARROW=${{ steps.market.outputs.arrow }}
-          # GraphQL mutation to change user status
+          MSG="ETH: $ARROW $PCT (\$$DOLLAR)"
+          echo "✏️ Setting status: $MSG"
           read -r -d '' QUERY <<-'EOF'
           mutation($msg: String!, $emoji: String!) {
             changeUserStatus(input: {
@@ -54,11 +62,17 @@ jobs:
             }
           }
           EOF
-          # Build status message, including arrow, percent, and dollar change
-          MSG="ETH: $ARROW $PCT (\$$DOLLAR)"
-          echo "✏️ Setting status to: $MSG"
-          # Send the GraphQL request
-          curl -s -X POST https://api.github.com/graphql \
+          RESPONSE=$(curl -s -X POST https://api.github.com/graphql \
             -H "Authorization: bearer $GITHUB_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "$(jq -n --arg query "$QUERY" --arg msg "$MSG" --arg emoji "$ARROW" '{query: $query, variables: {msg: $msg, emoji: $emoji}}')"
+            -d "$(jq -n --arg query "$QUERY" --arg msg "$MSG" --arg emoji "$ARROW" '{query: $query, variables: {msg: $msg, emoji: $emoji}}')" \
+            -w "\n%{http_code}")
+          echo "📨 Response: $RESPONSE"
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "Status code: $HTTP_CODE"
+          echo "Body: $BODY"
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error ::GraphQL mutation failed with status $HTTP_CODE"
+            exit 1
+          fi
