@@ -1,9 +1,9 @@
 name: 🐍 Generate Contribution Snake
 
 on:
-  schedule: # runs every day at midnight UTC
+  schedule:
     - cron: "0 0 * * *"
-  workflow_dispatch: # allows manual triggering
+  workflow_dispatch:
 
 jobs:
   build-snake:
@@ -12,17 +12,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          persist-credentials: true # so later commit can push
 
       - name: Generate snake animation
         uses: Platane/snk@v3
         with:
-          # your GitHub username
           github_user_name: "MayerAttila"
-
-          # output files to generate
           outputs: |
             output/github-snake.svg
             output/github-snake-dark.svg?palette=github-dark
-
-          # GitHub token for API access
           github_token: ${{ secrets.USER_BIO_TOKEN }}
+
+      - name: Commit updated snake SVGs
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "chore: update GitHub-snakes"
+          file_pattern: "output/*.svg"
+          branch: main
