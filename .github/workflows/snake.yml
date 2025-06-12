@@ -1,0 +1,27 @@
+name: 🐍 Generate Contribution Snake
+
+on:
+  schedule: # run every 12 hours
+    - cron: "0 */12 * * *"
+  workflow_dispatch: # manual trigger
+  push:
+    branches:
+      - main
+
+jobs:
+  build-snake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate snake animation
+        uses: Platane/snk@v3
+        with:
+          github_user_name: ${{ github.MayerAttila }}
+          outputs: |
+            output/github-snake.svg
+            output/github-snake-dark.svg?palette=github-dark
+        env:
+          GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
