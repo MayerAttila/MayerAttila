@@ -1,27 +1,28 @@
 name: 🐍 Generate Contribution Snake
 
 on:
-  schedule: # run every 12 hours
-    - cron: "0 */12 * * *"
-  workflow_dispatch: # manual trigger
-  push:
-    branches:
-      - main
+  schedule: # runs every day at midnight UTC
+    - cron: "0 0 * * *"
+  workflow_dispatch: # allows manual triggering
 
 jobs:
   build-snake:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Generate snake animation
         uses: Platane/snk@v3
         with:
-          github_user_name: ${{ github.MayerAttila }}
+          # your GitHub username
+          github_user_name: "MayerAttila"
+
+          # output files to generate
           outputs: |
             output/github-snake.svg
             output/github-snake-dark.svg?palette=github-dark
-        env:
-          GITHUB_TOKEN: ${{ secrets.USER_BIO_TOKEN }}
+
+          # GitHub token for API access
+          github_token: ${{ secrets.USER_BIO_TOKEN }}
