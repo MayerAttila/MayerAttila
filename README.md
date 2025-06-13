@@ -44,7 +44,6 @@
         <li>🔭 I’m currently working on a <strong>PMT V2</strong></li>
         <li>💻 I’m learning <strong>React &amp; Next.js</strong></li>
         <li>🤔 I’m seeking help with <strong>React performance optimizations</strong></li>
-        <li>👯 I’m open to collaborate on <strong>web apps</strong></li>
         <li>🔗 I’m interested in <strong>Web3 &amp; Crypto</strong></li>
         <li>📫 How to reach me: <a href="mailto:mayerattila4@gmail.com">mayerattila4@gmail.com</a></li>
         <li>⚡ Fun fact: The very first “bug” was a moth trapped in a relay in 1947.</li>
