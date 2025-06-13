@@ -19,17 +19,10 @@
       />
     </td>
     <!-- Right: Big welcome text -->
-    <td
-      width="70%"
-      align="left"
-      valign="middle"
-      style="border: none;"
-    >
-      <p align="center">
-  <strong style="font-size:4em; color:#64c3de;">
-    👋𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝗼𝗻 𝗺𝘆 𝗽𝗿𝗼𝗳𝗶𝗹𝗲!✨
-  </strong>
-</p>
+    <td width="70%" align="center" valign="middle" border="0">
+      <h1 style="margin:0; font-size:6em; color:#64c3de; line-height:1;">
+        <strong>👋𝗪𝗲𝗹𝗰𝗼𝗺𝗲 on my profile!✨</strong>
+      </h1>
     </td>
   </tr>
 </table>
