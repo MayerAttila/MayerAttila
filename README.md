@@ -20,7 +20,7 @@
     </td>
     <!-- Right: Big welcome text -->
     <td width="70%" align="center" valign="middle" border="0">
-      <h1 style="margin:0; font-size:6em; color:#64c3de; line-height:1;">
+      <h1 style="margin:0; font-size:9em; color:#64c3de; line-height:1;">
         <strong>👋𝗪𝗲𝗹𝗰𝗼𝗺𝗲 on my profile!✨</strong>
       </h1>
     </td>
