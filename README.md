@@ -47,6 +47,7 @@
         <li>👯 I’m open to collaborate on <strong>web apps</strong></li>
         <li>🔗 I’m interested in <strong>Web3 &amp; Crypto</strong></li>
         <li>📫 How to reach me: <a href="mailto:mayerattila4@gmail.com">mayerattila4@gmail.com</a></li>
+        <li>⚡ Fun fact: The very first “computer bug” was an actual moth found stuck in a relay in 1947!</li>
       </ul>
     </td>
     <!-- RIGHT CELL: FUN GIF -->
