@@ -26,8 +26,8 @@
       style="border: none;"
     >
       <h1 style="margin:0; font-size:4em; color:#64c3de;">
-        👋𝗪𝗲𝗹𝗰𝗼𝗺𝗲 on my profile!✨
-      </h1>
+  <strong>👋𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝗼𝗻 𝗺𝘆 𝗽𝗿𝗼𝗳𝗶𝗹𝗲!✨</strong>
+</h1>
     </td>
   </tr>
 </table>
